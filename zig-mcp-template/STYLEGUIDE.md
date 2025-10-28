@@ -161,11 +161,47 @@
 
   Memory Management
 
-  Allocator Pattern:
+  Uses the "unmanaged" style of allocators whenever possible, including using
+  the unmanaged variants of stdlib structures (ie `ArrayList`, etc).
+
+  Reasons:
+
+  - smaller objects (don't need to carry the pointer to the allocator)
+  - passing the allocator into a function is a clear signal to the caller that
+    this function will allocate memory
+  - explicit allocators makes it very easy to create arenas at different points
+    in the function call stack to control memory lifetimes and performance
+  - Simpler initialization of data structures using constant members, ie:
+  ```zig
+  const thing: std.ArrayList(u8) = .empty;
+  ```
+
+  Implementation details:
+
   - Pass allocator as first parameter after self
   - Always defer cleanup immediately after allocation
   - Use arena allocators for complex temporary allocations
+  - Write functions assuming that they are not in arena IE that they clean up
+    after themselves.
+  - when using an arena in a function, name allocator argument
+    `allocator_parent`  and the arena allocator `allocator_arena` to
+    distinguish the allocators and signal allocations that are meant to live in
+    the parent scope.
+  - For executables, use the `std.heap.DebugAllocator` when building in debug
+    mode and `std.heap.smp_allocator` when in release mode, IE:
+
+  ```zig
+      // use the debug allocator in debug builds, otherwise use smp
+      const allocator = (
+          if (builtin.mode == .Debug) alloc: {
+              var da = std.heap.DebugAllocator(.{}){};
+              break :alloc da.allocator();
+          } else std.heap.smp_allocator
+      );
+  ```
+
   - Example from topology/root.zig:1119-1122:
+  ```zig
   pub fn join(
       parent_allocator: std.mem.Allocator,
       topologies: struct{
@@ -179,6 +215,7 @@
       const allocator = arena.allocator();
       // ... work with allocator
   }
+  ```
 
   Ownership:
   - Functions that allocate typically return !Type and transfer ownership
