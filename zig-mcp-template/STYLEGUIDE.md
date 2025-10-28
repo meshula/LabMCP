@@ -171,6 +171,10 @@
     this function will allocate memory
   - explicit allocators makes it very easy to create arenas at different points
     in the function call stack to control memory lifetimes and performance
+  - Simpler initialization of data structures using constant members, ie:
+  ```zig
+  const thing: std.ArrayList(u8) = .empty;
+  ```
 
   Implementation details:
 
