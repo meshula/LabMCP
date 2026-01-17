@@ -38,20 +38,6 @@ private:
         const rapidjson::Value& id,
         const rapidjson::Value& params
     );
-
-    // Tool execution
-    std::string executeRollDice(
-        rapidjson::Document::AllocatorType& allocator,
-        const rapidjson::Value& id,
-        const rapidjson::Value* arguments
-    );
-
-    // Helper to create tool error response
-    std::string createToolErrorResponse(
-        rapidjson::Document::AllocatorType& allocator,
-        const rapidjson::Value& id,
-        const std::string& message
-    );
 };
 
 } // namespace mcp

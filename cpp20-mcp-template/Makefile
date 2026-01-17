@@ -9,6 +9,7 @@ INCLUDES = -Ithird-party
 SOURCES = src/main.cpp \
           src/server.cpp \
           src/mcp.cpp \
+          src/tools/registry.cpp \
           src/tools/dice.cpp
 
 # Object files

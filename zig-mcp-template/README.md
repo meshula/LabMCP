@@ -9,10 +9,11 @@ This project provides a working example of an MCP server written in Zig that imp
 ## Features
 
 - **Roll Dice Tool**: Implements a `roll-dice` tool that accepts notation like `3d8` (roll 3 eight-sided dice)
+- **Tool Registry Pattern**: Centralized tool registration with function pointer callbacks
 - **Minimal Dependencies**: Built with Zig's standard library only
 - **Simple Build System**: Uses `zig build` with no external build tools
 - **MCP Protocol**: Full implementation of the Model Context Protocol for tool serving
-- **Easy to Extend**: Clean, documented code structure for adding new tools
+- **Easy to Extend**: Add new tools by creating a module and adding one line to the registry
 
 ## Requirements
 
@@ -70,23 +71,108 @@ Example:
 zig-mcp-template/
 ├── src/
 │   ├── main.zig           # Entry point and stdio handling
-│   ├── mcp.zig            # MCP protocol implementation
+│   ├── mcp.zig            # MCP protocol types and definitions
 │   ├── tools/
+│   │   ├── registry.zig   # Tool registry infrastructure
 │   │   └── dice.zig       # Dice rolling tool implementation
-│   └── ...
+│   └── root.zig
 ├── build.zig              # Build configuration
 ├── README.md              # This file
 ├── PLAN.md                # Technical design and implementation plan
 └── STATUS.md              # Current project status
 ```
 
-## Creating Your Own MCP Server
+## Architecture
 
-1. Clone this repository
-2. Modify `src/tools/` to add your own tools
-3. Update the tool registry in `src/main.zig`
-4. Update `README.md` with your tool's documentation
-5. Build and test with `zig build run`
+The template uses a **tool registry pattern** for maintainable and scalable tool management:
+
+- **`src/tools/registry.zig`**: Core infrastructure
+  - `ToolDefinition`: Struct containing tool metadata and execution callback
+  - `TOOLS`: Comptime-known array of all registered tools
+  - `findToolByName()`: Generic tool lookup
+  - `listTools()`: Generate MCP-compatible tool list
+
+- **`src/tools/dice.zig`**: Example tool implementation
+  - `NAME`, `DESCRIPTION`, `SCHEMA`: Tool metadata constants
+  - `execute()`: Function matching `ToolExecuteFn` signature
+  - Core logic: `DiceRoll` and `RollResult` types
+
+- **`src/main.zig`**: MCP server
+  - Generic request routing
+  - Uses registry for tool lookup and dispatch
+  - No tool-specific code - scales with any number of tools
+
+## Adding New Tools
+
+The registry pattern makes adding tools straightforward:
+
+### Step 1: Create Your Tool Module
+
+Create `src/tools/mytool.zig`:
+
+```zig
+const std = @import("std");
+
+pub const NAME = "my-tool";
+pub const DESCRIPTION = "Description of what my tool does";
+pub const SCHEMA =
+    \\{
+    \\  "type": "object",
+    \\  "properties": {
+    \\    "param": {
+    \\      "type": "string",
+    \\      "description": "Parameter description"
+    \\    }
+    \\  },
+    \\  "required": ["param"]
+    \\}
+;
+
+pub fn execute(
+    allocator: std.mem.Allocator,
+    arguments: ?std.json.Value,
+) ![]const u8 {
+    // Extract arguments
+    const args_obj = arguments.?.object;
+    const param = args_obj.get("param").?.string;
+
+    // Your tool logic here
+    return try std.fmt.allocPrint(allocator, "Result: {s}", .{param});
+}
+```
+
+### Step 2: Register in the Tool Registry
+
+Edit `src/tools/registry.zig`:
+
+```zig
+const mytool = @import("mytool.zig");  // Add import
+
+pub const TOOLS = [_]ToolDefinition{
+    .{
+        .name = dice.NAME,
+        .description = dice.DESCRIPTION,
+        .schema_json = dice.SCHEMA,
+        .execute_fn = &dice.execute,
+    },
+    // Add your tool here:
+    .{
+        .name = mytool.NAME,
+        .description = mytool.DESCRIPTION,
+        .schema_json = mytool.SCHEMA,
+        .execute_fn = &mytool.execute,
+    },
+};
+```
+
+### Step 3: Build and Test
+
+```bash
+zig build
+./test_server.sh
+```
+
+That's it! No changes to `main.zig` or dispatch logic needed.
 
 ## Development
 
@@ -94,11 +180,14 @@ zig-mcp-template/
 # Build
 zig build
 
-# Run
-zig build run
+# Run the server
+./zig-out/bin/zig-mcp-template
 
-# Test
-zig build test
+# Test with integration script
+./test_server.sh
+
+# Run unit tests for individual modules
+zig test src/tools/dice.zig
 
 # Clean
 rm -rf zig-cache zig-out

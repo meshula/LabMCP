@@ -1,5 +1,6 @@
 #include "server.hpp"
-#include "tools/dice.hpp"
+#include "tools/registry.hpp"
+#include "tools/dice.hpp"  // Ensures dice tool is registered
 #include <rapidjson/document.h>
 #include <rapidjson/error/en.h>
 #include <iostream>
@@ -103,21 +104,8 @@ std::string Server::handleToolsList(
     rapidjson::Document::AllocatorType& allocator,
     const rapidjson::Value& id
 ) {
-    // Create input schema for roll-dice tool
-    const char* schema_json =
-        "{\"type\":\"object\",\"properties\":{\"notation\":{\"type\":\"string\","
-        "\"description\":\"Dice notation (e.g., '3d8' for 3 eight-sided dice)\"}},"
-        "\"required\":[\"notation\"]}";
-
-    rapidjson::Document schema;
-    schema.Parse(schema_json);
-
-    std::vector<Tool> tools;
-    tools.push_back(Tool{
-        .name = "roll-dice",
-        .description = "Roll dice using standard notation (e.g., 3d8 for 3 eight-sided dice)",
-        .inputSchema = std::move(schema)
-    });
+    // Get tools from registry
+    auto tools = tools::ToolRegistry::instance().listTools();
 
     rapidjson::Value result = createToolsList(allocator, tools);
     rapidjson::Document response = createSuccessResponse(allocator, id, result);
@@ -138,59 +126,20 @@ std::string Server::handleToolsCall(
 
     const std::string tool_name = params["name"].GetString();
 
-    if (tool_name == "roll-dice") {
-        const rapidjson::Value* arguments = params.HasMember("arguments")
-            ? &params["arguments"] : nullptr;
-        return executeRollDice(allocator, id, arguments);
-    } else {
+    // Look up the tool in the registry
+    const auto* tool_def = tools::ToolRegistry::instance().findToolByName(tool_name);
+    if (!tool_def) {
         rapidjson::Document response = createErrorResponse(
             allocator, id, ErrorCode::InvalidParams, "Unknown tool: " + tool_name
         );
         return serializeToJson(response);
     }
-}
 
-std::string Server::executeRollDice(
-    rapidjson::Document::AllocatorType& allocator,
-    const rapidjson::Value& id,
-    const rapidjson::Value* arguments
-) {
-    if (!arguments || !arguments->IsObject() || !arguments->HasMember("notation")) {
-        return createToolErrorResponse(allocator, id, "Missing notation argument");
-    }
+    // Execute the tool via its callback
+    const rapidjson::Value* arguments = params.HasMember("arguments")
+        ? &params["arguments"] : nullptr;
 
-    const std::string notation = (*arguments)["notation"].GetString();
-
-    try {
-        auto result = tools::executeDiceRoll(notation);
-        std::string result_text = result.format();
-
-        CallToolResult call_result{
-            .content = { Content{ .type = "text", .text = result_text } },
-            .isError = false
-        };
-
-        rapidjson::Value result_value = createToolCallResult(allocator, call_result);
-        rapidjson::Document response = createSuccessResponse(allocator, id, result_value);
-        return serializeToJson(response);
-    } catch (const tools::InvalidDiceNotation& e) {
-        return createToolErrorResponse(allocator, id,
-            "Invalid dice notation. Use format like '3d8'. Error: " + std::string(e.what()));
-    } catch (const std::exception& e) {
-        return createToolErrorResponse(allocator, id,
-            "Error rolling dice: " + std::string(e.what()));
-    }
-}
-
-std::string Server::createToolErrorResponse(
-    rapidjson::Document::AllocatorType& allocator,
-    const rapidjson::Value& id,
-    const std::string& message
-) {
-    CallToolResult call_result{
-        .content = { Content{ .type = "text", .text = message } },
-        .isError = true
-    };
+    CallToolResult call_result = tool_def->execute_fn(arguments);
 
     rapidjson::Value result_value = createToolCallResult(allocator, call_result);
     rapidjson::Document response = createSuccessResponse(allocator, id, result_value);

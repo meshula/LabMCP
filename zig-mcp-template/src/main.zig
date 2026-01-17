@@ -1,6 +1,6 @@
 const std = @import("std");
 const mcp = @import("mcp.zig");
-const dice = @import("tools/dice.zig");
+const registry = @import("tools/registry.zig");
 
 const PROTOCOL_VERSION = "2024-11-05";
 const SERVER_NAME = "zig-mcp-template";
@@ -119,34 +119,11 @@ const Server = struct {
     }
 
     fn handleToolsList(self: *Server, id: ?std.json.Value) ![]u8 {
-        const input_schema = try std.json.parseFromSlice(
-            std.json.Value,
-            self.allocator,
-            \\{
-            \\  "type": "object",
-            \\  "properties": {
-            \\    "notation": {
-            \\      "type": "string",
-            \\      "description": "Dice notation (e.g., '3d8' for 3 eight-sided dice)"
-            \\    }
-            \\  },
-            \\  "required": ["notation"]
-            \\}
-            ,
-            .{},
-        );
-        defer input_schema.deinit();
-
-        const tools = [_]mcp.Tool{
-            .{
-                .name = "roll-dice",
-                .description = "Roll dice using standard notation (e.g., 3d8 for 3 eight-sided dice)",
-                .inputSchema = input_schema.value,
-            },
-        };
+        const list = try registry.listTools(self.allocator);
+        defer registry.freeToolsList(self.allocator, list);
 
         const result = mcp.ToolsList{
-            .tools = &tools,
+            .tools = list.tools,
         };
 
         return self.createSuccessResponseJson(id, result);
@@ -163,37 +140,17 @@ const Server = struct {
 
         const tool_name = name.string;
 
-        if (std.mem.eql(u8, tool_name, "roll-dice")) {
-            return self.executeRollDice(id, params_obj.get("arguments"));
-        } else {
+        // Look up the tool in the registry
+        const tool_def = registry.findToolByName(tool_name) orelse {
             return self.createErrorResponseJson(id, .InvalidParams, "Unknown tool");
-        }
-    }
-
-    fn executeRollDice(self: *Server, id: ?std.json.Value, arguments: ?std.json.Value) ![]u8 {
-        const args_obj = if (arguments) |a| a.object else {
-            return self.createErrorResponseJson(id, .InvalidParams, "Missing arguments");
         };
 
-        const notation_value = args_obj.get("notation") orelse {
-            return self.createErrorResponseJson(id, .InvalidParams, "Missing notation argument");
+        // Execute the tool via its callback
+        const result_text = tool_def.execute_fn(self.allocator, params_obj.get("arguments")) catch |err| {
+            const error_msg = try std.fmt.allocPrint(self.allocator, "Tool execution failed: {}", .{err});
+            defer self.allocator.free(error_msg);
+            return self.createToolErrorResponse(id, error_msg);
         };
-
-        const notation = notation_value.string;
-
-        // Parse and roll the dice
-        const roll = dice.DiceRoll.parse(notation) catch {
-            return self.createToolErrorResponse(id, "Invalid dice notation. Use format like '3d8'");
-        };
-
-        var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
-        const random = prng.random();
-
-        var result = try roll.rollDetailed(self.allocator, random);
-        result.notation = try self.allocator.dupe(u8, notation);
-        defer result.deinit(self.allocator);
-
-        const result_text = try result.format(self.allocator);
         defer self.allocator.free(result_text);
 
         // Create the response

@@ -1,9 +1,33 @@
 #include "dice.hpp"
+#include "registry.hpp"
 #include <sstream>
 #include <algorithm>
 #include <numeric>
 
 namespace tools {
+
+// Tool metadata definitions
+const char* const DICE_NAME = "roll-dice";
+const char* const DICE_DESCRIPTION = "Roll dice using standard notation (e.g., 3d8 for 3 eight-sided dice)";
+const char* const DICE_SCHEMA =
+    "{\"type\":\"object\",\"properties\":{\"notation\":{\"type\":\"string\","
+    "\"description\":\"Dice notation (e.g., '3d8' for 3 eight-sided dice)\"}},"
+    "\"required\":[\"notation\"]}";
+
+// Static initializer to register the dice tool
+namespace {
+    struct DiceToolRegistrar {
+        DiceToolRegistrar() {
+            ToolRegistry::instance().registerTool(ToolDefinition{
+                .name = DICE_NAME,
+                .description = DICE_DESCRIPTION,
+                .schema_json = DICE_SCHEMA,
+                .execute_fn = executeDiceTool
+            });
+        }
+    };
+    static DiceToolRegistrar registrar;
+}
 
 // Static random number generator
 std::random_device DiceRoll::rd_;
@@ -85,6 +109,45 @@ DiceRollResult executeDiceRoll(const std::string& notation) {
         .rolls = std::move(rolls),
         .total = total
     };
+}
+
+// Tool execution function for registry
+mcp::CallToolResult executeDiceTool(const rapidjson::Value* arguments) {
+    // Validate arguments
+    if (!arguments || !arguments->IsObject() || !arguments->HasMember("notation")) {
+        return mcp::CallToolResult{
+            .content = { mcp::Content{ .type = "text", .text = "Missing notation argument" } },
+            .isError = true
+        };
+    }
+
+    const std::string notation = (*arguments)["notation"].GetString();
+
+    try {
+        auto result = executeDiceRoll(notation);
+        std::string result_text = result.format();
+
+        return mcp::CallToolResult{
+            .content = { mcp::Content{ .type = "text", .text = result_text } },
+            .isError = false
+        };
+    } catch (const InvalidDiceNotation& e) {
+        return mcp::CallToolResult{
+            .content = { mcp::Content{
+                .type = "text",
+                .text = "Invalid dice notation. Use format like '3d8'. Error: " + std::string(e.what())
+            }},
+            .isError = true
+        };
+    } catch (const std::exception& e) {
+        return mcp::CallToolResult{
+            .content = { mcp::Content{
+                .type = "text",
+                .text = "Error rolling dice: " + std::string(e.what())
+            }},
+            .isError = true
+        };
+    }
 }
 
 } // namespace tools

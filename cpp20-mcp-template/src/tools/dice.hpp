@@ -1,11 +1,21 @@
 #pragma once
 
+#include "../mcp.hpp"
 #include <string>
 #include <vector>
 #include <random>
 #include <stdexcept>
+#include <rapidjson/document.h>
 
 namespace tools {
+
+// Tool metadata constants
+extern const char* const DICE_NAME;
+extern const char* const DICE_DESCRIPTION;
+extern const char* const DICE_SCHEMA;
+
+// Tool execution function matching registry signature
+mcp::CallToolResult executeDiceTool(const rapidjson::Value* arguments);
 
 // Exception for invalid dice notation
 class InvalidDiceNotation : public std::runtime_error {

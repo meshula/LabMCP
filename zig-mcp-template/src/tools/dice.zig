@@ -1,5 +1,53 @@
 const std = @import("std");
 
+/// Tool metadata constants
+pub const NAME = "roll-dice";
+pub const DESCRIPTION = "Roll dice using standard notation (e.g., 3d8 for 3 eight-sided dice)";
+pub const SCHEMA =
+    \\{
+    \\  "type": "object",
+    \\  "properties": {
+    \\    "notation": {
+    \\      "type": "string",
+    \\      "description": "Dice notation (e.g., '3d8' for 3 eight-sided dice)"
+    \\    }
+    \\  },
+    \\  "required": ["notation"]
+    \\}
+;
+
+/// Execute the dice roll tool
+pub fn execute(
+    allocator: std.mem.Allocator,
+    arguments: ?std.json.Value,
+) ![]const u8 {
+    // Extract arguments
+    const args_obj = if (arguments) |a| a.object else {
+        return try allocator.dupe(u8, "Missing arguments");
+    };
+
+    const notation_value = args_obj.get("notation") orelse {
+        return try allocator.dupe(u8, "Missing notation argument");
+    };
+
+    const notation = notation_value.string;
+
+    // Parse and roll the dice
+    const roll = DiceRoll.parse(notation) catch {
+        return try allocator.dupe(u8, "Invalid dice notation. Use format like '3d8'");
+    };
+
+    var prng = std.Random.DefaultPrng.init(@intCast(std.time.timestamp()));
+    const random = prng.random();
+
+    var result = try roll.rollDetailed(allocator, random);
+    result.notation = try allocator.dupe(u8, notation);
+    defer result.deinit(allocator);
+
+    // Format and return the result
+    return try result.format(allocator);
+}
+
 /// Parse dice notation like "3d8" into number of dice and number of sides
 pub const DiceRoll = struct {
     count: u32,

@@ -86,11 +86,12 @@ Add to your Claude Desktop configuration (`~/Library/Application Support/Claude/
 All templates implement:
 
 - **MCP Protocol**: Full JSON-RPC 2.0 implementation
-- **Tool System**: Extensible tool registration and execution
+- **Tool Registry Pattern**: Centralized tool registration with callback-based dispatch
 - **Dice Roller**: Example tool accepting notation like "3d8"
 - **Error Handling**: Proper error codes and messages
 - **stdio Transport**: Standard input/output communication
 - **Testing**: Integration test scripts included
+- **Easy Extension**: Add new tools without modifying core dispatch logic
 
 ## Project Structure
 
@@ -116,13 +117,22 @@ LabMCP/
 
 ## Creating Your Own Tool
 
-Both templates are designed to be starting points:
+Both templates use a tool registry pattern for easy extension:
 
-1. Clone or copy a template
-2. Modify the tool implementation in `src/tools/`
-3. Update the tool registration
+### Zig Template
+1. Create a new file in `src/tools/` (e.g., `mytool.zig`)
+2. Define constants: `NAME`, `DESCRIPTION`, `SCHEMA`
+3. Implement `execute()` function matching the `ToolExecuteFn` signature
+4. Add one entry to the `TOOLS` array in `src/tools/registry.zig`
+5. Build and test - no changes to dispatch logic needed!
+
+### C++ Template
+1. Create a new file in `src/tools/` (e.g., `MyTool.cpp`)
+2. Implement the tool logic
+3. Register it in the tools vector in `main.cpp`
 4. Build and test
-5. Deploy with Claude Desktop
+
+Both approaches eliminate hard-coded tool handling and use centralized registration.
 
 ## Resources
 
