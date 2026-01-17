@@ -21,7 +21,7 @@ This project provides a working example of an MCP server written in C++20 that i
 - Make
 - RapidJSON (included in third-party/)
 
-## Installation
+## Building
 
 ```bash
 git clone https://github.com/yourusername/cpp20-mcp-template.git
@@ -29,9 +29,55 @@ cd cpp20-mcp-template
 make
 ```
 
+## Installation
+
+After building, you can install the MCP server for use with Claude Code and/or Claude Desktop.
+
+### Installing for Claude Code
+
+The easiest way to install for Claude Code is using the CLI:
+
+```bash
+# From the project directory
+claude mcp add cpp-dice -- $(pwd)/build/cpp20-mcp-template
+```
+
+This will add the server to your local project configuration. To verify it's working:
+
+```bash
+claude mcp list
+```
+
+You should see `cpp-dice: ✓ Connected`.
+
+### Installing for Claude Desktop
+
+Add the server to your Claude Desktop configuration file:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+**Linux**: `~/.config/Claude/claude_desktop_config.json`
+
+Add this entry to the `mcpServers` object:
+
+```json
+{
+  "mcpServers": {
+    "cpp-dice": {
+      "command": "/absolute/path/to/cpp20-mcp-template/build/cpp20-mcp-template",
+      "args": []
+    }
+  }
+}
+```
+
+Replace `/absolute/path/to/` with the actual path to your installation. After editing the config, restart Claude Desktop for the changes to take effect.
+
 ## Usage
 
-### Running the Server
+### Running the Server Standalone
+
+You can run the server directly for testing:
 
 ```bash
 make run
@@ -39,20 +85,10 @@ make run
 ./build/cpp20-mcp-template
 ```
 
-The server communicates via stdio using the MCP protocol (JSON-RPC 2.0).
+The server communicates via stdio using the MCP protocol (JSON-RPC 2.0). You can send JSON-RPC requests directly or use the test script:
 
-### Using with Claude Desktop
-
-Add to your Claude Desktop configuration:
-
-```json
-{
-  "mcpServers": {
-    "cpp-dice": {
-      "command": "/path/to/cpp20-mcp-template/build/cpp20-mcp-template"
-    }
-  }
-}
+```bash
+make test
 ```
 
 ### Example Tool Usage
